@@ -3,12 +3,12 @@
 # === CONFIG ===
 API_KEY="054ac51662da079a6a1cc91a68f50b1e"
 BASE_URL="https://schedule.osl.team/api/app"
-CATEGORY_ID="cmoff815bsp"
-TARGET_ID="gmofejw40q7"
+CATEGORY_ID="cmo8c3a3w67"
+TARGET_ID="gmofkmxjpy4"
 PLUGIN_TIMEOUT="1200"
 JOB_TIMEOUT="3600"
 TIMEZONE="Asia/Dhaka"
-PREFIX="ums-6-"
+PREFIX="ums-0-"
 XML_DIR="./xml_task"
 PARSER="./parse_xml.py"
 

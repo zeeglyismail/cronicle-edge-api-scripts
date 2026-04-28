@@ -5,9 +5,9 @@ API_KEY="054ac51662da079a6a1cc91a68f50b1e"
 BASE_URL="https://schedule2.osl.team/api/app"
 
 # Filter mode: "target_only", "category_only", or "category_and_target"
-FILTER_MODE="target_only"
+FILTER_MODE="category_only"
 
-CATEGORY_ID="cmmso11u05t"        # used when mode is category_only or category_and_target
+CATEGORY_ID="gmo85s9rfqr"        # used when mode is category_only or category_and_target
 TARGET_ID="allgrp"          # used when mode is target_only or category_and_target
 
 # === SAFETY ===

@@ -2,9 +2,9 @@
 
 API_KEY="054ac51662da079a6a1cc91a68f50b1e"
 BASE_URL="https://schedule.osl.team/api/app"
-SOURCE_CATEGORY="cmnfjt0vmj8"
-NEW_CATEGORY="cmo8c3a3w67"
-NEW_TARGET="gmo85s9rfqr"
+SOURCE_CATEGORY="cmkwd9p4g01"
+NEW_CATEGORY="cmogovjri2i"
+NEW_TARGET="gmogoupbuqu"
 
 echo "Fetching events in category $SOURCE_CATEGORY..."
 

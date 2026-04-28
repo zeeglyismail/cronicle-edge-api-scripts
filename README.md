@@ -11,16 +11,17 @@ Cuts down hours of UI clicking to seconds of script execution.
 1. Overview & Why This Exists
 2. Prerequisites
 3. Common Configuration
-4. Script Reference
-    - 4.1 `parse_xml.py`
-    - 4.2 `bulk_import_xml.sh`
-    - 4.3 `bulk_move_category.sh`
-    - 4.4 `bulk_move_ums3.sh`
-    - 4.5 `bulk_update_timeout.sh`
-    - 4.6 `bulk_toggle_events.sh`
-    - 4.7 `bulk_toggle_by_target.sh`
-    - 4.8 `bulk_delete_category.sh`
-    - 4.9 `bulk_delete_events.sh`
+4. Script Reference (with full source code)
+    - `parse_xml.py`
+    - `bulk_import_xml.sh`
+    - `bulk_move_category.sh`
+    - `bulk_move_ums3.sh`
+    - `bulk_update_timeout_filtered.sh`
+    - `bulk_update_schedule.sh`
+    - `bulk_toggle_events.sh`
+    - `bulk_toggle_by_target.sh`
+    - `bulk_delete_category.sh`
+    - `bulk_delete_events.sh`
 5. Recommended Workflows
 6. Cronicle Concepts Cheat Sheet
 7. Troubleshooting
@@ -39,12 +40,13 @@ This toolkit is a collection of bash + Python scripts that automate bulk operati
 | --- | --- |
 | Migrate Windows `.xml` Task Scheduler files into Cronicle events | `bulk_import_xml.sh` + `parse_xml.py` |
 | Bulk-move events between categories and/or targets | `bulk_move_category.sh` |
-| Bulk-move events to a different target (same category) | `bulk_move_ums3.sh` |
-| Bulk-update HTTP plugin timeout | `bulk_update_timeout.sh` |
+| Bulk-move events to a different target (keep category) | `bulk_move_ums3.sh` |
+| Bulk-update HTTP plugin timeout + job timeout (filtered) | `bulk_update_timeout_filtered.sh` |
+| Bulk-update schedule interval (every N min/hour/daily) | `bulk_update_schedule.sh` |
 | Bulk enable/disable by category + target | `bulk_toggle_events.sh` |
 | Bulk enable/disable by target only (across all categories) | `bulk_toggle_by_target.sh` |
-| Simple bulk delete by single category | `bulk_delete_category.sh` |
 | Bulk delete with three filter modes | `bulk_delete_events.sh` |
+| Simple bulk delete by single category | `bulk_delete_category.sh` |
 
 ---
 
@@ -77,11 +79,12 @@ Recommended structure:
 ├── bulk_import_xml.sh
 ├── bulk_move_category.sh
 ├── bulk_move_ums3.sh
-├── bulk_update_timeout.sh
+├── bulk_update_timeout_filtered.sh
+├── bulk_update_schedule.sh
 ├── bulk_toggle_events.sh
 ├── bulk_toggle_by_target.sh
-├── bulk_delete_category.sh
 ├── bulk_delete_events.sh
+├── bulk_delete_category.sh
 └── xml_task/              ← drop Windows Task XML files here
     ├── task1.xml
     └── task2.xml
@@ -109,18 +112,24 @@ Every script has a **CONFIG block at the top**. You edit values, save, and run. 
 | `TIMEZONE` | IANA timezone string | `Asia/Dhaka` |
 | `PLUGIN_TIMEOUT` | HTTP Request plugin timeout (seconds) | `1200` |
 | `JOB_TIMEOUT` | Outer Cronicle job timeout (seconds) | `3600` |
+| `FILTER_MODE` | `target_only` / `category_only` / `category_and_target` | `category_and_target` |
+| `EXECUTE` | `yes` to apply, anything else for dry run | `no` |
 
-### How to find IDs in Cronicle UI
+### How to find IDs
 
-- **Category ID** — Admin → Categories → click a category → top of page shows `Category ID: cmoxxxxx`
-- **Server Group ID** — Admin → Servers → click a group → modal shows `Group ID: gmoxxxxx`
-- **Event ID** — visible in URL when editing an event: `?sub=edit_event&id=emoxxxxx`
+**Category ID** — Cronicle UI → Admin → Categories → click a category → top of page shows `Category ID: cmoxxxxx`
+
+**Server Group ID** — Cronicle UI → Admin → Servers → click a group → modal shows `Group ID: gmoxxxxx`
+
+**Event ID** — visible in URL when editing an event: `?sub=edit_event&id=emoxxxxx`
 
 ---
 
 ## 4. Script Reference
 
-### 4.1 🐍 `parse_xml.py`
+---
+
+### 🐍 `parse_xml.py`
 
 **Purpose:** Helper script. Parses a Windows Task Scheduler XML file and extracts the fields needed to create a Cronicle event.
 
@@ -147,7 +156,7 @@ Outputs JSON like:
 
 **Special handling:** Windows exports XML in UTF-16 with BOM — the parser detects and decodes correctly.
 
-### Full Script:
+### 📜 Full Source Code
 
 ```python
 #!/usr/bin/env python3
@@ -225,7 +234,7 @@ except Exception as e:
 
 ---
 
-### 4.2 📥 `bulk_import_xml.sh`
+### 📥 `bulk_import_xml.sh`
 
 **Purpose:** Migrate a directory of Windows Task XML files into Cronicle events.
 
@@ -233,25 +242,7 @@ except Exception as e:
 
 1. Drop all `.xml` files into `./xml_task/`
 2. Edit CONFIG at top of script (PREFIX, CATEGORY_ID, TARGET_ID)
-3. Run
-
-**Configuration variables:**
-
-```bash
-CATEGORY_ID="cmo8f8622n7"
-TARGET_ID="gmo85s9rfqr"
-PREFIX="ums-2-"
-PLUGIN_TIMEOUT="1200"
-JOB_TIMEOUT="3600"
-TIMEZONE="Asia/Dhaka"
-XML_DIR="./xml_task"
-```
-
-**Run:**
-
-```bash
-./bulk_import_xml.sh
-```
+3. Run: `./bulk_import_xml.sh`
 
 **Features:**
 
@@ -267,18 +258,18 @@ XML_DIR="./xml_task"
 | Windows Interval | Cronicle Timing |
 | --- | --- |
 | `PT1M` | every minute |
-| `PT2M` | every 2 min (`[0,2,4,…58]`) |
-| `PT5M` | every 5 min (`[0,5,10,…55]`) |
+| `PT2M` | every 2 min |
+| `PT5M` | every 5 min |
 | `PT10M` | every 10 min |
 | `PT15M` | every 15 min |
-| `PT30M` | every 30 min (`[0,30]`) |
+| `PT30M` | every 30 min |
 | `PT1H` | every hour at minute=StartBoundary |
-| `PT2H`/`PT3H`/`PT4H`/`PT6H`/`PT8H`/`PT12H` | every N hours, hour list explicit |
+| `PT2H` to `PT12H` | every N hours, hour list explicit |
 | `P1D` / `PT24H` | daily at StartBoundary time |
 
 Unknown intervals get flagged with ⚠ in summary, default to "every 2 minutes" — review manually.
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -519,23 +510,9 @@ echo "=========================================="
 
 ---
 
-### 4.3 📦 `bulk_move_category.sh`
+### 📦 `bulk_move_category.sh`
 
 **Purpose:** Move all events from one category to another, optionally also changing the target server.
-
-**Configuration:**
-
-```bash
-SOURCE_CATEGORY="cmnfjt0vmj8"   # move FROM this
-NEW_CATEGORY="cmo8c3a3w67"      # move TO this
-NEW_TARGET="gmo85s9rfqr"        # also set target to this
-```
-
-**Run:**
-
-```bash
-./bulk_move_category.sh
-```
 
 **Behavior:**
 
@@ -543,7 +520,7 @@ NEW_TARGET="gmo85s9rfqr"        # also set target to this
 - Updates each event's `category` and `target` in a single API call
 - All other settings (URL, timing, params, timeout, name) stay untouched
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -608,20 +585,13 @@ echo "Done. Moved: $((COUNT - FAILED)), Failed: $FAILED"
 
 ---
 
-### 4.4 🎯 `bulk_move_ums3.sh` (Target-Only Move)
+### 🎯 `bulk_move_ums3.sh` (Target-Only Move)
 
 **Purpose:** Same idea as `bulk_move_category.sh`, but only changes target — keeps category. Variant for moving events to a different server within the same category.
 
-**Configuration:**
-
-```bash
-CATEGORY_ID="cmne6hb8nql"     # filter by this category
-NEW_TARGET="gmo85s9rfqr"      # change all matching events to this target
-```
-
 **When to use:** When you need to swap the server group but keep events in their original category.
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -675,52 +645,172 @@ echo "Done."
 
 ---
 
-### 4.5 ⏱ `bulk_update_timeout.sh`
+### ⏱ `bulk_update_timeout_filtered.sh`
 
-**Purpose:** Bulk-update the HTTP Request plugin's timeout for all events.
+**Purpose:** Bulk-update timeouts with the same flexible 3-mode filter pattern as the delete script. Can update **plugin timeout**, **job timeout**, or both in a single run.
 
-**Configuration:**
+> 💡 This script replaces the old `bulk_update_timeout.sh` (which updated every event in Cronicle indiscriminately). Set `FILTER_MODE="target_only"` with `TARGET_ID="allgrp"` to replicate the old "update everything" behavior.
+> 
 
-```bash
-NEW_TIMEOUT="1200"
-```
+**Two timeouts it can update:**
 
-**Important:** This script updates `params.timeout` (the **plugin-level** HTTP timeout shown in plugin parameters). It does **NOT** touch the outer `timeout` field (the overall job timeout near the bottom of the event edit page).
+| Field | Where in UI | What it controls |
+| --- | --- | --- |
+| `params.timeout` (`NEW_PLUGIN_TIMEOUT`) | Plugin Parameters → Timeout | HTTP Request plugin timeout |
+| `timeout` top-level (`NEW_JOB_TIMEOUT`) | Timeout field near bottom | Overall job kill switch |
 
-**How it works:**
+To skip the job timeout and only update the plugin timeout, set `NEW_JOB_TIMEOUT=""`.
 
-- Two-step per event: GET event → modify only the timeout → PUT update
-- Slower than other scripts (one extra fetch per event) because it preserves all other plugin params intact
+**Three filter modes:**
 
-**Optional filter:** As written, it updates **every** event in Cronicle. To restrict to a category, modify the Python filter line:
+| Mode | Behavior |
+| --- | --- |
+| `target_only` | All events on a target, regardless of category |
+| `category_only` | All events in a category, regardless of target |
+| `category_and_target` | Only the intersection (most precise) |
 
-```python
-[print(e['id']) for e in data['rows'] if e.get('category') == 'YOUR_CATEGORY_ID']
-```
+**Two-stage safety:**
 
-### Full Script:
+1. **Dry run first** — keep `EXECUTE="no"`, run, review preview list
+2. **Real run** — change `EXECUTE="yes"`, run, type `yes` to confirm
+
+**Example use cases:**
+
+- Update plugin timeout for ums-1 events on UMS3 server only → `category_and_target`
+- Bump both timeouts for everything on a heavily-loaded server → `target_only`
+- Set longer plugin timeout for an entire category → `category_only`
+
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
 
+# === CONFIG (edit these before running) ===
 API_KEY="054ac51662da079a6a1cc91a68f50b1e"
 BASE_URL="https://schedule.osl.team/api/app"
-NEW_TIMEOUT="1200"
 
-# Fetch all event IDs
-echo "Fetching event list..."
-EVENT_IDS=$(curl -s -X POST "$BASE_URL/get_schedule/v1" \
+# Filter mode: "target_only", "category_only", or "category_and_target"
+FILTER_MODE="category_and_target"
+
+CATEGORY_ID="cmmso11u05t"        # used when mode is category_only or category_and_target
+TARGET_ID="gmo85rxfmqq"          # used when mode is target_only or category_and_target
+
+# Timeout values (in seconds)
+NEW_PLUGIN_TIMEOUT="1200"        # HTTP plugin timeout (params.timeout)
+NEW_JOB_TIMEOUT="3600"           # Outer job timeout (top-level timeout) — set to "" to skip
+
+# === SAFETY ===
+# Set to "yes" to actually update. Anything else = dry run (preview only, no changes).
+EXECUTE="no"
+
+# === SCRIPT ===
+case "$FILTER_MODE" in
+  "target_only"|"category_only"|"category_and_target") ;;
+  *)
+    echo "ERROR: FILTER_MODE must be 'target_only', 'category_only', or 'category_and_target'."
+    echo "Got: $FILTER_MODE"
+    exit 1
+    ;;
+esac
+
+echo "=========================================="
+echo "  Cronicle Bulk Timeout Update"
+echo "=========================================="
+echo "Mode:           $FILTER_MODE"
+case "$FILTER_MODE" in
+  "target_only")
+    echo "Target:         $TARGET_ID  (ALL categories on this target)"
+    ;;
+  "category_only")
+    echo "Category:       $CATEGORY_ID  (ALL targets in this category)"
+    ;;
+  "category_and_target")
+    echo "Category:       $CATEGORY_ID"
+    echo "Target:         $TARGET_ID"
+    ;;
+esac
+echo "Plugin timeout: $NEW_PLUGIN_TIMEOUT seconds"
+if [ -n "$NEW_JOB_TIMEOUT" ]; then
+  echo "Job timeout:    $NEW_JOB_TIMEOUT seconds"
+else
+  echo "Job timeout:    (skipped — only updating plugin timeout)"
+fi
+echo "Execute:        $EXECUTE"
+echo "=========================================="
+echo ""
+
+echo "Fetching events..."
+
+EVENT_DATA=$(curl -s -X POST "$BASE_URL/get_schedule/v1" \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"limit": 1000}' | \
-  python3 -c "import sys, json; data = json.load(sys.stdin); [print(e['id']) for e in data['rows']]")
+  -d '{"limit": 5000}' | \
+  python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+mode = '$FILTER_MODE'
+cat = '$CATEGORY_ID'
+tgt = '$TARGET_ID'
 
-TOTAL=$(echo "$EVENT_IDS" | wc -l)
-echo "Found $TOTAL events. Starting update..."
+for e in data['rows']:
+    match = False
+    if mode == 'target_only' and e.get('target') == tgt:
+        match = True
+    elif mode == 'category_only' and e.get('category') == cat:
+        match = True
+    elif mode == 'category_and_target' and e.get('category') == cat and e.get('target') == tgt:
+        match = True
+
+    if match:
+        title = e.get('title', '').replace('|', '_')
+        print(f\"{e['id']}|{e.get('enabled',0)}|{e.get('category','?')}|{e.get('target','?')}|{title}\")
+")
+
+if [ -z "$EVENT_DATA" ]; then
+  echo "No events match the filter. Nothing to update."
+  exit 0
+fi
+
+TOTAL=$(echo "$EVENT_DATA" | wc -l)
+
+echo ""
+echo "=========================================="
+echo "  PREVIEW — $TOTAL events match"
+echo "=========================================="
+echo "$EVENT_DATA" | awk -F'|' '{
+  state = ($2 == "1") ? "[ON] " : "[OFF]"
+  printf "  %s %s  cat=%s  tgt=%s  %s\n", state, $1, $3, $4, $5
+}'
+echo "=========================================="
+
+# Dry-run mode — stop here
+if [ "$EXECUTE" != "yes" ]; then
+  echo ""
+  echo "DRY RUN — no events were updated."
+  echo "Set EXECUTE=\"yes\" in the script to actually apply timeout changes."
+  exit 0
+fi
+
+# Execute mode — confirmation required
+echo ""
+echo "About to update timeout on $TOTAL events."
+read -p "Type 'yes' to proceed, anything else to cancel: " CONFIRM
+
+if [ "$CONFIRM" != "yes" ]; then
+  echo "Cancelled. No events were updated."
+  exit 0
+fi
+
+echo ""
+echo "Starting update..."
 echo "---"
 
 COUNT=0
-for EID in $EVENT_IDS; do
+SUCCESS=0
+FAILED=0
+
+while IFS='|' read -r EID ENABLED CAT TGT TITLE; do
+  [ -z "$EID" ] && continue
   COUNT=$((COUNT + 1))
 
   # Get current event to preserve other params
@@ -729,57 +819,345 @@ for EID in $EVENT_IDS; do
     -H "Content-Type: application/json" \
     -d "{\"id\": \"$EID\"}")
 
-  TITLE=$(echo "$CURRENT" | python3 -c "import sys, json; print(json.load(sys.stdin)['event']['title'])")
-
-  # Build updated params with new timeout, keeping everything else
+  # Build updated params with new plugin timeout, keeping everything else
   UPDATED_PARAMS=$(echo "$CURRENT" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 params = data['event'].get('params', {})
-params['timeout'] = '$NEW_TIMEOUT'
+params['timeout'] = '$NEW_PLUGIN_TIMEOUT'
 print(json.dumps(params))
 ")
+
+  # Build update payload — include job timeout only if set
+  if [ -n "$NEW_JOB_TIMEOUT" ]; then
+    UPDATE_PAYLOAD="{\"id\": \"$EID\", \"params\": $UPDATED_PARAMS, \"timeout\": $NEW_JOB_TIMEOUT}"
+  else
+    UPDATE_PAYLOAD="{\"id\": \"$EID\", \"params\": $UPDATED_PARAMS}"
+  fi
 
   # Send update
   RESULT=$(curl -s -X POST "$BASE_URL/update_event/v1" \
     -H "X-API-Key: $API_KEY" \
     -H "Content-Type: application/json" \
-    -d "{\"id\": \"$EID\", \"params\": $UPDATED_PARAMS}")
+    -d "$UPDATE_PAYLOAD")
 
-  CODE=$(echo "$RESULT" | python3 -c "import sys, json; print(json.load(sys.stdin).get('code', -1))")
+  CODE=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('code',-1))" 2>/dev/null)
 
   if [ "$CODE" = "0" ]; then
-    echo "[$COUNT/$TOTAL] ✓ $EID — $TITLE"
+    echo "[$COUNT/$TOTAL] ✓ Updated $EID — $TITLE"
+    SUCCESS=$((SUCCESS + 1))
   else
-    echo "[$COUNT/$TOTAL] ✗ $EID — FAILED: $RESULT"
+    echo "[$COUNT/$TOTAL] ✗ FAILED $EID — $RESULT"
+    FAILED=$((FAILED + 1))
   fi
 
-  sleep 0.1  # small delay to avoid hammering the server
-done
+  sleep 0.1
+done <<< "$EVENT_DATA"
 
-echo "---"
-echo "Done."
+echo ""
+echo "=========================================="
+echo "  SUMMARY"
+echo "=========================================="
+echo "Total matched: $TOTAL"
+echo "Updated:       $SUCCESS"
+echo "Failed:        $FAILED"
+echo "=========================================="
 ```
 
 ---
 
-### 4.6 🔄 `bulk_toggle_events.sh`
+### 🕐 `bulk_update_schedule.sh`
+
+**Purpose:** Bulk-change the **schedule interval** (how often events run) — every 1 min, every 5 min, hourly, daily, etc. Same 3-mode filter pattern.
+
+**Supported interval presets:**
+
+| Preset | Meaning |
+| --- | --- |
+| `1m`, `2m`, `3m`, `5m`, `10m`, `15m`, `20m`, `30m` | Every N minutes |
+| `1h` | Every hour at `START_MINUTE` |
+| `2h`, `3h`, `4h`, `6h`, `8h`, `12h` | Every N hours at `START_MINUTE` |
+| `daily` | Once a day at `START_HOUR:START_MINUTE` |
+
+**Sub-hour intervals** (1m–30m) ignore `START_HOUR`/`START_MINUTE`.
+**Hourly+ intervals** use `START_MINUTE` to control which minute of the hour they fire.
+**Daily** uses both `START_HOUR` and `START_MINUTE`.
+
+**Two-stage safety:**
+
+1. **Dry run** — keep `EXECUTE="no"`, see preview + new schedule label
+2. **Real run** — `EXECUTE="yes"`, type `yes` when prompted
+
+**Example use cases:**
+
+- ums-3 events on UMS3 server are hammering it every 2 min → throttle to every 10 min
+- Move all ums-1 events to hourly at :15
+- Switch a category to daily 3:30 AM runs
+
+### 📜 Full Source Code
+
+```bash
+#!/bin/bash
+
+# === CONFIG (edit these before running) ===
+API_KEY="054ac51662da079a6a1cc91a68f50b1e"
+BASE_URL="https://schedule.osl.team/api/app"
+
+# Filter mode: "target_only", "category_only", or "category_and_target"
+FILTER_MODE="category_and_target"
+
+CATEGORY_ID="cmmso11u05t"        # used when mode is category_only or category_and_target
+TARGET_ID="gmo85rxfmqq"          # used when mode is target_only or category_and_target
+
+# === SCHEDULE INTERVAL ===
+# Pick ONE preset by setting INTERVAL to the value you want.
+# Supported presets:
+#   "1m", "2m", "3m", "5m", "10m", "15m", "20m", "30m"
+#   "1h", "2h", "3h", "4h", "6h", "8h", "12h"
+#   "daily"
+#
+# For "1h" and above, also set START_MINUTE (e.g. 0 means runs at HH:00).
+# For "daily", also set START_HOUR and START_MINUTE.
+INTERVAL="5m"
+START_HOUR="0"        # only used for hourly+ / daily intervals
+START_MINUTE="0"      # only used for hourly+ / daily intervals
+
+# === SAFETY ===
+# Set to "yes" to actually update. Anything else = dry run (preview only, no changes).
+EXECUTE="no"
+
+# === SCRIPT ===
+case "$FILTER_MODE" in
+  "target_only"|"category_only"|"category_and_target") ;;
+  *)
+    echo "ERROR: FILTER_MODE must be 'target_only', 'category_only', or 'category_and_target'."
+    echo "Got: $FILTER_MODE"
+    exit 1
+    ;;
+esac
+
+# Map interval preset to Cronicle timing JSON
+HOURS=""
+case "$INTERVAL" in
+  "1m")
+    MINUTES="[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59]"
+    LABEL="every 1 minute"
+    ;;
+  "2m")
+    MINUTES="[0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58]"
+    LABEL="every 2 minutes"
+    ;;
+  "3m")
+    MINUTES="[0,3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57]"
+    LABEL="every 3 minutes"
+    ;;
+  "5m")
+    MINUTES="[0,5,10,15,20,25,30,35,40,45,50,55]"
+    LABEL="every 5 minutes"
+    ;;
+  "10m")
+    MINUTES="[0,10,20,30,40,50]"
+    LABEL="every 10 minutes"
+    ;;
+  "15m")
+    MINUTES="[0,15,30,45]"
+    LABEL="every 15 minutes"
+    ;;
+  "20m")
+    MINUTES="[0,20,40]"
+    LABEL="every 20 minutes"
+    ;;
+  "30m")
+    MINUTES="[0,30]"
+    LABEL="every 30 minutes"
+    ;;
+  "1h")
+    MINUTES="[$START_MINUTE]"
+    LABEL="every hour at minute $START_MINUTE"
+    ;;
+  "2h")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[0,2,4,6,8,10,12,14,16,18,20,22]"
+    LABEL="every 2 hours at minute $START_MINUTE"
+    ;;
+  "3h")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[0,3,6,9,12,15,18,21]"
+    LABEL="every 3 hours at minute $START_MINUTE"
+    ;;
+  "4h")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[0,4,8,12,16,20]"
+    LABEL="every 4 hours at minute $START_MINUTE"
+    ;;
+  "6h")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[0,6,12,18]"
+    LABEL="every 6 hours at minute $START_MINUTE"
+    ;;
+  "8h")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[0,8,16]"
+    LABEL="every 8 hours at minute $START_MINUTE"
+    ;;
+  "12h")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[0,12]"
+    LABEL="every 12 hours at minute $START_MINUTE"
+    ;;
+  "daily")
+    MINUTES="[$START_MINUTE]"
+    HOURS="[$START_HOUR]"
+    LABEL="daily at ${START_HOUR}:${START_MINUTE}"
+    ;;
+  *)
+    echo "ERROR: Unsupported INTERVAL preset: $INTERVAL"
+    echo "Supported: 1m, 2m, 3m, 5m, 10m, 15m, 20m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, daily"
+    exit 1
+    ;;
+esac
+
+# Build timing JSON
+if [ -n "$HOURS" ]; then
+  TIMING="{\"minutes\": $MINUTES, \"hours\": $HOURS}"
+else
+  TIMING="{\"minutes\": $MINUTES}"
+fi
+
+echo "=========================================="
+echo "  Cronicle Bulk Schedule Update"
+echo "=========================================="
+echo "Mode:       $FILTER_MODE"
+case "$FILTER_MODE" in
+  "target_only")
+    echo "Target:     $TARGET_ID  (ALL categories on this target)"
+    ;;
+  "category_only")
+    echo "Category:   $CATEGORY_ID  (ALL targets in this category)"
+    ;;
+  "category_and_target")
+    echo "Category:   $CATEGORY_ID"
+    echo "Target:     $TARGET_ID"
+    ;;
+esac
+echo "Interval:   $INTERVAL  ($LABEL)"
+echo "Timing:     $TIMING"
+echo "Execute:    $EXECUTE"
+echo "=========================================="
+echo ""
+
+echo "Fetching events..."
+
+EVENT_DATA=$(curl -s -X POST "$BASE_URL/get_schedule/v1" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 5000}' | \
+  python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+mode = '$FILTER_MODE'
+cat = '$CATEGORY_ID'
+tgt = '$TARGET_ID'
+
+for e in data['rows']:
+    match = False
+    if mode == 'target_only' and e.get('target') == tgt:
+        match = True
+    elif mode == 'category_only' and e.get('category') == cat:
+        match = True
+    elif mode == 'category_and_target' and e.get('category') == cat and e.get('target') == tgt:
+        match = True
+
+    if match:
+        title = e.get('title', '').replace('|', '_')
+        print(f\"{e['id']}|{e.get('enabled',0)}|{e.get('category','?')}|{e.get('target','?')}|{title}\")
+")
+
+if [ -z "$EVENT_DATA" ]; then
+  echo "No events match the filter. Nothing to update."
+  exit 0
+fi
+
+TOTAL=$(echo "$EVENT_DATA" | wc -l)
+
+echo ""
+echo "=========================================="
+echo "  PREVIEW — $TOTAL events match"
+echo "=========================================="
+echo "$EVENT_DATA" | awk -F'|' '{
+  state = ($2 == "1") ? "[ON] " : "[OFF]"
+  printf "  %s %s  cat=%s  tgt=%s  %s\n", state, $1, $3, $4, $5
+}'
+echo "=========================================="
+echo ""
+echo "All matched events will be set to: $LABEL"
+echo "=========================================="
+
+# Dry-run mode — stop here
+if [ "$EXECUTE" != "yes" ]; then
+  echo ""
+  echo "DRY RUN — no events were updated."
+  echo "Set EXECUTE=\"yes\" in the script to actually apply schedule changes."
+  exit 0
+fi
+
+# Execute mode — confirmation required
+echo ""
+echo "About to change schedule for $TOTAL events to: $LABEL"
+read -p "Type 'yes' to proceed, anything else to cancel: " CONFIRM
+
+if [ "$CONFIRM" != "yes" ]; then
+  echo "Cancelled. No events were updated."
+  exit 0
+fi
+
+echo ""
+echo "Starting update..."
+echo "---"
+
+COUNT=0
+SUCCESS=0
+FAILED=0
+
+while IFS='|' read -r EID ENABLED CAT TGT TITLE; do
+  [ -z "$EID" ] && continue
+  COUNT=$((COUNT + 1))
+
+  # Send update — only timing field needs to change
+  RESULT=$(curl -s -X POST "$BASE_URL/update_event/v1" \
+    -H "X-API-Key: $API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\": \"$EID\", \"timing\": $TIMING}")
+
+  CODE=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('code',-1))" 2>/dev/null)
+
+  if [ "$CODE" = "0" ]; then
+    echo "[$COUNT/$TOTAL] ✓ Updated $EID — $TITLE"
+    SUCCESS=$((SUCCESS + 1))
+  else
+    echo "[$COUNT/$TOTAL] ✗ FAILED $EID — $RESULT"
+    FAILED=$((FAILED + 1))
+  fi
+
+  sleep 0.1
+done <<< "$EVENT_DATA"
+
+echo ""
+echo "=========================================="
+echo "  SUMMARY"
+echo "=========================================="
+echo "Total matched: $TOTAL"
+echo "Updated:       $SUCCESS"
+echo "Failed:        $FAILED"
+echo "New schedule:  $LABEL"
+echo "=========================================="
+```
+
+---
+
+### 🔄 `bulk_toggle_events.sh`
 
 **Purpose:** Bulk enable or disable events filtered by category AND target.
-
-**Configuration:**
-
-```bash
-CATEGORY_ID="cmmso11u05t"
-TARGET_ID="gmo85rxfmqq"
-ACTION="enable"        # or "disable"
-```
-
-**Run:**
-
-```bash
-./bulk_toggle_events.sh
-```
 
 **Behavior:**
 
@@ -793,7 +1171,7 @@ ACTION="enable"        # or "disable"
 - Before maintenance: disable specific subset
 - After maintenance: re-enable
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -874,16 +1252,9 @@ echo "Done. ${ACTION^}d: $SUCCESS, Failed: $FAILED"
 
 ---
 
-### 4.7 🌐 `bulk_toggle_by_target.sh`
+### 🌐 `bulk_toggle_by_target.sh`
 
 **Purpose:** Bulk enable or disable **all events on a target server**, regardless of category.
-
-**Configuration:**
-
-```bash
-TARGET_ID="gmofd0rdn0s"
-ACTION="enable"        # or "disable"
-```
 
 **Use cases:**
 
@@ -893,7 +1264,7 @@ ACTION="enable"        # or "disable"
 
 **Caution:** Affects every event on that target across all categories. Use with intention.
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -972,15 +1343,9 @@ echo "Done. ${ACTION^}d: $SUCCESS, Failed: $FAILED"
 
 ---
 
-### 4.8 🗑 `bulk_delete_category.sh` (Simple Single-Category Delete)
+### 🗑 `bulk_delete_category.sh` (Simple Single-Category Delete)
 
 **Purpose:** Delete all events in a single category. Simpler version, with mandatory confirmation prompt.
-
-**Configuration:**
-
-```bash
-CATEGORY_ID="cmne4cjpzdt"
-```
 
 **Behavior:**
 
@@ -988,7 +1353,7 @@ CATEGORY_ID="cmne4cjpzdt"
 - Requires typing `DELETE` in all caps to proceed
 - Continues past failures, shows count at end
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -1064,18 +1429,9 @@ echo "Done. Deleted: $((COUNT - FAILED)), Failed: $FAILED"
 
 ---
 
-### 4.9 🧹 `bulk_delete_events.sh` (Flexible Multi-Mode Delete)
+### 🧹 `bulk_delete_events.sh` (Flexible Multi-Mode Delete)
 
 **Purpose:** Bulk delete with three filter modes — category only, target only, or both.
-
-**Configuration:**
-
-```bash
-FILTER_MODE="target_only"   # or "category_only" or "category_and_target"
-CATEGORY_ID="cmmso11u05t"
-TARGET_ID="gmo85rxfmqq"
-EXECUTE="no"                # "no" = dry run preview, "yes" = actually delete
-```
 
 **Two-stage safety:**
 
@@ -1092,7 +1448,7 @@ The exact count must match — prevents accidental confirmation when the event c
 | `category_only` | Bad batch import — delete entire category |
 | `category_and_target` | Most precise, safest — delete only the intersection |
 
-### Full Script:
+### 📜 Full Source Code
 
 ```bash
 #!/bin/bash
@@ -1298,6 +1654,32 @@ echo "=========================================="
 2. **Real delete** — `EXECUTE="yes"`, run, confirm with `DELETE <count>`
 3. **Re-import** — `bulk_import_xml.sh` with corrected config
 
+### Workflow F — Throttle Load on a Backend Server
+
+When a backend is struggling under Cronicle's load:
+
+1. Identify hot category + target combination
+2. **Dry run schedule update** with `bulk_update_schedule.sh`:
+    
+    ```bash
+    FILTER_MODE="category_and_target"CATEGORY_ID="<hot category>"TARGET_ID="<struggling server>"INTERVAL="10m"   # was 2m, now 10mEXECUTE="no"
+    ```
+    
+3. Review preview, switch `EXECUTE="yes"`, run
+4. Optionally also bump timeouts via `bulk_update_timeout_filtered.sh` if jobs were timing out
+
+### Workflow G — Tune Timeouts for a Category
+
+When jobs in a category routinely time out:
+
+1. Edit `bulk_update_timeout_filtered.sh`:
+    
+    ```bash
+    FILTER_MODE="category_only"CATEGORY_ID="<category>"NEW_PLUGIN_TIMEOUT="1800"NEW_JOB_TIMEOUT="3600"EXECUTE="no"
+    ```
+    
+2. Dry run → review → `EXECUTE="yes"` → run
+
 ---
 
 ## 6. Cronicle Concepts Cheat Sheet
@@ -1334,8 +1716,7 @@ Cronicle uses arrays of selected values, NOT cron expressions:
 
 This means "at minute :00 or :30, when hour is 00/06/12/18, on Mon/Wed/Fri".
 
-- **Empty `timing` object** = runs every minute
-- **No `timing` field at all** = "on demand" only
+**Empty `timing` object = runs every minute.No `timing` field at all = "on demand" only.**
 
 ### Two Different Timeouts
 
@@ -1377,10 +1758,20 @@ This means "at minute :00 or :30, when hour is 00/06/12/18, on Mon/Wed/Fri".
 - **Cause:** Target group is empty, or server in group is offline
 - **Fix:** Check Cronicle Admin → Servers — confirm workers are connected and assigned to the group
 
-### `Unsupported API` error on certain endpoints
+### `Unsupported API: app/api_xxx` error
 
-- **Cause:** Cronicle-Edge Fork has locked down some public APIs
-- **Fix:** Use UI to fetch IDs (e.g. server group IDs) — these aren't exposed via API in Edge fork
+- **Cause:** Cronicle Edge fork has locked down some endpoints (e.g. `get_server_groups`)
+- **Fix:** Get the IDs from the UI directly instead of via API
+
+### Schedule didn't change after running `bulk_update_schedule.sh`
+
+- **Cause:** Cronicle UI cached — refresh page
+- **Verify via API:**
+    
+    ```bash
+    curl -s -X POST "$BASE_URL/get_event/v1" \  -H "X-API-Key: $API_KEY" \  -H "Content-Type: application/json" \  -d '{"id": "emoxxxx"}' | python3 -m json.tool | grep -A5 timing
+    ```
+    
 
 ---
 
@@ -1399,10 +1790,10 @@ This means "at minute :00 or :30, when hour is 00/06/12/18, on Mon/Wed/Fri".
 
 ### Pre-flight Safety Checklist
 
-Before running any destructive script:
+Before running any destructive or modifying script:
 
 - [ ]  Did you double-check `CATEGORY_ID` and `TARGET_ID`?
-- [ ]  Is `EXECUTE="no"` for the first run? (delete scripts)
+- [ ]  Is `EXECUTE="no"` for the first run? (delete/update scripts)
 - [ ]  Did you spot-check 1-2 events in UI to confirm what they actually are?
 - [ ]  Do you have a backup or export of the schedule? (Cronicle UI → Schedule → Export)
 
@@ -1432,14 +1823,15 @@ repo/
 
 ---
 
-## 9. 📌 Quick Reference Card
+## 9. Quick Reference Card
 
 | Task | Script | Edit |
 | --- | --- | --- |
 | Import Windows tasks | `bulk_import_xml.sh` | PREFIX, CATEGORY_ID, TARGET_ID, XML_DIR |
 | Move to new category + target | `bulk_move_category.sh` | SOURCE_CATEGORY, NEW_CATEGORY, NEW_TARGET |
 | Move target only | `bulk_move_ums3.sh` | CATEGORY_ID, NEW_TARGET |
-| Update HTTP timeout (all events) | `bulk_update_timeout.sh` | NEW_TIMEOUT |
+| Update timeouts (filtered) | `bulk_update_timeout_filtered.sh` | FILTER_MODE, CATEGORY_ID, TARGET_ID, NEW_PLUGIN_TIMEOUT, NEW_JOB_TIMEOUT, EXECUTE |
+| Update schedule interval | `bulk_update_schedule.sh` | FILTER_MODE, CATEGORY_ID, TARGET_ID, INTERVAL, START_HOUR, START_MINUTE, EXECUTE |
 | Enable/disable by category+target | `bulk_toggle_events.sh` | CATEGORY_ID, TARGET_ID, ACTION |
 | Enable/disable whole target | `bulk_toggle_by_target.sh` | TARGET_ID, ACTION |
 | Delete (single category) | `bulk_delete_category.sh` | CATEGORY_ID |
@@ -1447,4 +1839,30 @@ repo/
 
 ---
 
-*Last updated: 2026-04-26 Maintained by: DevOps team*
+*Last updated: 2026-04-26Maintained by: DevOps team*
+
+Delete ALL JOBS ALL CATAGORIES ALL SERVERS
+
+```bash
+# Set variables
+CRONICLE_URL="https://schedule2.osl.team"
+API_KEY="054ac51662da079a6a1cc91a68f50b1e"
+
+# Get all event IDs
+curl -s -H "X-API-Key: $API_KEY" \
+  "$CRONICLE_URL/api/app/get_schedule/v1?limit=1000" \
+  | jq -r '.rows[].id' > /tmp/event_ids.txt
+
+# Review first
+wc -l /tmp/event_ids.txt
+head /tmp/event_ids.txt
+
+# Delete all
+while read id; do
+  curl -s -X POST -H "X-API-Key: $API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\":\"$id\"}" \
+    "$CRONICLE_URL/api/app/delete_event/v1"
+  echo "Deleted: $id"
+done < /tmp/event_ids.txt
+```

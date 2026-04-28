@@ -4,8 +4,8 @@
 API_KEY="054ac51662da079a6a1cc91a68f50b1e"
 BASE_URL="https://schedule.osl.team/api/app"
 
-TARGET_ID="gmofd0rdn0s"          # which server group to target
-ACTION="enable"                  # "enable" or "disable"
+TARGET_ID="gmo85s9rfqr"          # which server group to target
+ACTION="disable"                  # "enable" or "disable"
 
 # === SCRIPT ===
 if [ "$ACTION" = "enable" ]; then

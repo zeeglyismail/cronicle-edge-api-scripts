@@ -2,7 +2,7 @@
 
 API_KEY="054ac51662da079a6a1cc91a68f50b1e"
 BASE_URL="https://schedule.osl.team/api/app"
-CATEGORY_ID="cmne4cjpzdt"
+CATEGORY_ID="cmoff66avp7"
 
 echo "Fetching events in category $CATEGORY_ID..."
 
