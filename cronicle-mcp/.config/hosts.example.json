@@ -1,0 +1,22 @@
+{
+  "default": "schedule",
+  "hosts": {
+    "schedule": {
+      "base_url": "https://schedule.osl.team",
+      "timezone": "Asia/Dhaka",
+      "request_timeout": 30,
+      "rate_limit_delay_ms": 100,
+      "groups": {
+        "UMS-0": "gmoXXXXXXXX",
+        "UMS-3": "gmoXXXXXXXX"
+      }
+    },
+    "schedule2": {
+      "base_url": "https://schedule2.osl.team",
+      "timezone": "Asia/Dhaka",
+      "request_timeout": 30,
+      "rate_limit_delay_ms": 100,
+      "groups": {}
+    }
+  }
+}

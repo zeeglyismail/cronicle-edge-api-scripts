@@ -1,0 +1,31 @@
+{
+  "default": "schedule",
+  "hosts": {
+    "schedule": {
+      "base_url": "https://schedule.osl.team",
+      "timezone": "Asia/Dhaka",
+      "request_timeout": 30,
+      "rate_limit_delay_ms": 100,
+      "groups": {
+        "UMS-0": "gmofkmxjpy4",
+        "UMS-3": "gmofejw40q7",
+        "unknown-gmo85rxfmqq": "gmo85rxfmqq",
+        "unknown-gmo85s9rfqr": "gmo85s9rfqr",
+        "unknown-gmofd0rdn0s": "gmofd0rdn0s",
+        "unknown-gmofcg1mrww": "gmofcg1mrww",
+        "unknown-gmo85ssclrc": "gmo85ssclrc",
+        "unknown-gmogoupbuqu": "gmogoupbuqu"
+      }
+    },
+    "schedule2": {
+      "base_url": "https://schedule2.osl.team",
+      "timezone": "Asia/Dhaka",
+      "request_timeout": 30,
+      "rate_limit_delay_ms": 100,
+      "groups": {
+        "UMS-6": "gmos3w3e710",
+        "UMS-1": "gmos50k4w1z"
+      }
+    }
+  }
+}

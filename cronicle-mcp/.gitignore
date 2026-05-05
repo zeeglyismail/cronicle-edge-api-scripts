@@ -1,0 +1,15 @@
+# Secrets — never commit
+#.config/hosts.json
+#.config/api_keys.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# uv / venv
+.venv/
+uv.lock

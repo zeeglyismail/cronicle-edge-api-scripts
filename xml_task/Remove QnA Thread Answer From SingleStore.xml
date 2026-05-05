@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Date>2015-06-18T19:52:43.9637103</Date>
+    <Author>WS01\Administrator</Author>
+    <Description>Remove QnA Thread Answer From SingleStore</Description>
+    <URI>\umsbd.net\Remove QnA Thread Answer From SingleStore</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>
+    <Hidden>true</Hidden>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <IdleSettings>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+  </Settings>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2015-06-18T01:00:00</StartBoundary>
+      <Repetition>
+        <Interval>P1D</Interval>
+        <Duration>P1D</Duration>
+      </Repetition>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>dotnet</Command>
+      <Arguments>"C:\Program Files\WebRequest\HttpRequest.dll" https://schedule.umsbd.net:4422/Student/Scheduler/RemoveQnAThreadAnswerFromSingleStore?hr=72</Arguments>
+    </Exec>
+  </Actions>
+</Task>

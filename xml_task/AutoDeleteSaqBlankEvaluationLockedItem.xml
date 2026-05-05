@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Date>2019-03-09T10:26:17.3352443</Date>
+    <Author>WS03\Nazmul</Author>
+    <Description>AutoDelete SaqBlankEvaluation Lock Item</Description>
+    <URI>\umsbd.net\AutoDeleteSaqBlankEvaluationLockedItem</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+  </Settings>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2019-03-09T00:00:00</StartBoundary>
+      <Repetition>
+        <Interval>PT5M</Interval>
+        <Duration>P1D</Duration>
+      </Repetition>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>dotnet</Command>
+      <Arguments>"C:\Program Files\WebRequest\HttpRequest.dll" https://schedule.umsbd.net:4422/Exam/AdminSaqQuestionEvaluation/AutoDeleteSaqBlankEvaluation?duration=0</Arguments>
+    </Exec>
+  </Actions>
+</Task>
