@@ -8,13 +8,13 @@
       "rate_limit_delay_ms": 100,
       "groups": {
         "UMS-0": "gmofkmxjpy4",
-        "UMS-3": "gmofejw40q7",
-        "unknown-gmo85rxfmqq": "gmo85rxfmqq",
-        "unknown-gmo85s9rfqr": "gmo85s9rfqr",
-        "unknown-gmofd0rdn0s": "gmofd0rdn0s",
-        "unknown-gmofcg1mrww": "gmofcg1mrww",
-        "unknown-gmo85ssclrc": "gmo85ssclrc",
-        "unknown-gmogoupbuqu": "gmogoupbuqu"
+        "UMS-1": "gmo85rxfmqq",
+        "UMS-2": "gmo85s9rfqr",
+        "UMS-3": "gmo85ssclrc",
+        "UMS-4": "gmofcg1mrww",
+        "UMS-5": "gmofd0rdn0s",
+        "UMS-6": "gmofejw40q7",
+        "ICR-OM": "gmogoupbuqu"
       }
     },
     "schedule2": {
