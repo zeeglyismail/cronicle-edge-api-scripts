@@ -171,7 +171,7 @@ Then `claude` from any directory and the tools are available.
 | Tool | Purpose |
 |---|---|
 | `cronicle_list_hosts` | Show configured hosts and which is default. Never returns API keys. |
-| `cronicle_list_events` | List events matching an `EventFilter`. Compact summaries (id, title, category, target, enabled, plugin, timing). |
+| `cronicle_list_events` | List events matching an `EventFilter`. Compact summaries (id, title, category, target, enabled, plugin, timing). Pass `include_url=True` to also get each event's endpoint URL. |
 | `cronicle_get_event` | Full event payload by id (params, timing, all timeouts, notes, etc.). |
 | `cronicle_summarize_schedule` | Counts grouped by category, by target, by (category, target). Resolves friendly names. Best orientation tool. |
 | `cronicle_list_categories` | All categories on a host (id, title, description, color). |

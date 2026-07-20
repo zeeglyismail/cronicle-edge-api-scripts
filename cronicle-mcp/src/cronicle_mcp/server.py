@@ -50,6 +50,7 @@ class EventSummary(BaseModel):
     enabled: bool
     plugin: Optional[str] = None
     timing_summary: str
+    url: Optional[str] = None  # populated only when the caller asks (include_url=True)
 
 
 def _summarize_timing(timing: dict | None) -> str:
@@ -132,7 +133,10 @@ def _guard_all_mode(filter: EventFilter, i_understand: bool, action_label: str) 
         )
 
 
-def _to_summary(event: dict) -> EventSummary:
+def _to_summary(event: dict, include_url: bool = False) -> EventSummary:
+    url = None
+    if include_url:
+        url = (event.get("params") or {}).get("url") or ""
     return EventSummary(
         id=event.get("id", ""),
         title=event.get("title", ""),
@@ -141,6 +145,7 @@ def _to_summary(event: dict) -> EventSummary:
         enabled=bool(event.get("enabled", 0)),
         plugin=event.get("plugin"),
         timing_summary=_summarize_timing(event.get("timing")),
+        url=url,
     )
 
 
@@ -151,6 +156,7 @@ def _to_summary(event: dict) -> EventSummary:
 def cronicle_list_events(
     filter: EventFilter,
     include_disabled: bool = True,
+    include_url: bool = False,
     host: Optional[str] = None,
 ) -> list[EventSummary]:
     """List Cronicle events matching a filter.
@@ -165,6 +171,11 @@ def cronicle_list_events(
       - "category_and_target"  requires both (most precise — preferred)
       - "all"                  every event (use sparingly)
 
+    include_url: when True, each summary also includes the plugin `url` field
+    (the endpoint the event hits). Use this for "list events on target X with
+    their URLs" -- no need to call cronicle_get_event per event. The URL comes
+    from the already-fetched schedule data, so it's free.
+
     host: which configured host to query. Defaults to the 'default' host in
     .config/hosts.json. Pass an explicit host name (e.g. "schedule2") to
     target a different Cronicle instance.
@@ -176,7 +187,8 @@ def cronicle_list_events(
     matched = [e for e in events if filter.matches(e)]
     if not include_disabled:
         matched = [e for e in matched if e.get("enabled")]
-    return [_to_summary(e) for e in matched]
+    matched.sort(key=lambda e: e.get("title", ""))
+    return [_to_summary(e, include_url=include_url) for e in matched]
 
 
 @mcp.tool()

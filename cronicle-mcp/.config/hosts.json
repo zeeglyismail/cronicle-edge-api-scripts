@@ -16,16 +16,6 @@
         "UMS-6": "gmofejw40q7",
         "ICR-OM": "gmogoupbuqu"
       }
-    },
-    "schedule2": {
-      "base_url": "https://schedule2.osl.team",
-      "timezone": "Asia/Dhaka",
-      "request_timeout": 30,
-      "rate_limit_delay_ms": 100,
-      "groups": {
-        "UMS-6": "gmos3w3e710",
-        "UMS-1": "gmos50k4w1z"
-      }
     }
   }
 }
