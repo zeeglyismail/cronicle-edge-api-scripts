@@ -1106,6 +1106,173 @@ def cronicle_get_active_jobs(host: Optional[str] = None) -> list[dict]:
 
 
 @mcp.tool()
+def cronicle_run_event(event_id: str, host: Optional[str] = None) -> dict:
+    """Fire ONE event immediately -- the API equivalent of "Run Now" in the UI.
+
+    Requires the API key to have `run_events` privilege (in addition to
+    manager). code='priv' back means that's missing -- fix in Cronicle UI ->
+    Admin -> API Keys.
+
+    event_id is an `emo*` event id (NOT a `j*` job id). This is NOT the same
+    as cronicle_toggle_events enable -- enabling only makes an event eligible
+    for its next scheduled tick; this actually starts a job right now.
+
+    Runs regardless of the enabled flag: a disabled event still fires when
+    you run it manually, exactly like the UI's Run Now button.
+
+    Returns the new job id(s). Track them with cronicle_get_active_jobs, or
+    stop one with cronicle_abort_job.
+
+    Common failures (returned as an error, not a silent no-op):
+      max_children         event is already running and its concurrency is 1
+      no_matching_servers  the event's target group matches no live server
+                           (always the case for a "^nomatch$" group)
+
+    To fire many events at once, use cronicle_run_events instead -- it
+    staggers the triggers and previews first.
+    """
+    if not event_id or not event_id.strip():
+        raise ValueError("cronicle_run_event: event_id is required")
+    hc = _resolve_host(host)
+    with CronicleClient(hc) as client:
+        event = client.get_event(event_id.strip())
+        job_ids = client.run_event(event_id.strip())
+    return {
+        "host": hc.name,
+        "event_id": event_id.strip(),
+        "event_title": event.get("title", ""),
+        "job_ids": job_ids,
+        "ok": True,
+    }
+
+
+@mcp.tool()
+def cronicle_run_events(
+    filter: EventFilter,
+    include_disabled: bool = False,
+    stagger_seconds: float = 1.0,
+    dry_run: bool = True,
+    confirm_count: Optional[int] = None,
+    host: Optional[str] = None,
+    i_understand_this_affects_everything: bool = False,
+) -> WriteResult:
+    """Fire EVERY event matching the filter, one by one ("Run Now" in bulk).
+
+    Requires the API key to have `run_events` privilege.
+
+    This starts real jobs against real endpoints. Migration- and sync-type
+    events will do actual work, not no-op. Treat it like cronicle_delete_events:
+    preview first, then confirm the exact count.
+
+    Workflow:
+      1. dry_run=True (default) -> matched list, count, how many are already
+         running, and the estimated wall-clock of the staggered fire
+      2. dry_run=False AND confirm_count=<that exact number> -> fires
+      3. confirm_count mismatch is REJECTED (the matched set drifted since
+         the preview)
+
+    include_disabled=False (default) skips disabled events, which is almost
+    always what "run everything" means -- a disabled event is disabled for a
+    reason. Set True to fire those too.
+
+    stagger_seconds (default 1.0) is the pause between triggers. 439 events at
+    1s is ~7.5 minutes of spread, which is much gentler on the app servers
+    than a burst. Raise it to 2-3 for heavy targets. 0 fires as fast as the
+    API allows -- don't, on production.
+
+    SAFETY: filter.mode='all' is blocked unless
+    i_understand_this_affects_everything=True.
+
+    Events that are already running fail with max_children (concurrency 1) --
+    that's reported per-event in `errors`, and the rest still fire. To stop a
+    run mid-flight, call cronicle_abort_jobs with the same target/category.
+    """
+    _guard_all_mode(filter, i_understand_this_affects_everything, "cronicle_run_events")
+    if stagger_seconds < 0:
+        raise ValueError("cronicle_run_events: stagger_seconds cannot be negative")
+    hc = _resolve_host(host)
+
+    with CronicleClient(hc) as client:
+        events = client.list_events()
+        matched = [e for e in events if filter.matches(e)]
+        if not include_disabled:
+            matched = [e for e in matched if e.get("enabled")]
+        matched.sort(key=lambda e: e.get("title", ""))
+        summaries = [_to_summary(e) for e in matched]
+
+        if dry_run:
+            try:
+                active = client.get_active_jobs()
+                running_event_ids = {j.get("event") for j in active.values()}
+            except Exception:
+                running_event_ids = set()
+            already_running = sum(1 for e in matched if e.get("id") in running_event_ids)
+            eta = len(matched) * stagger_seconds
+            return WriteResult(
+                host=hc.name,
+                executed=False,
+                matched_count=len(matched),
+                matched=summaries,
+                notes=[
+                    f"Would RUN NOW {len(matched)} events "
+                    f"({'including' if include_disabled else 'excluding'} disabled).",
+                    f"{already_running} of them are already running and will fail "
+                    f"with max_children if concurrency is 1.",
+                    f"Stagger {stagger_seconds}s between triggers -> "
+                    f"~{eta / 60:.1f} min to fire them all.",
+                    f"To execute: re-call with dry_run=False AND confirm_count={len(matched)}.",
+                ],
+            )
+
+        # Execute path -- require exact confirm_count match (same contract as delete)
+        if confirm_count is None:
+            raise ValueError(
+                f"cronicle_run_events: confirm_count is required when dry_run=False. "
+                f"Current matched count is {len(matched)}. "
+                f"Pass confirm_count={len(matched)} to proceed."
+            )
+        if confirm_count != len(matched):
+            raise ValueError(
+                f"cronicle_run_events: confirm_count={confirm_count} does NOT match "
+                f"current matched count {len(matched)}. The matched set may have changed "
+                f"since the last preview. Re-run with dry_run=True to see the current "
+                f"count, then pass that exact number as confirm_count."
+            )
+
+        succeeded, failed = 0, 0
+        errors: list[str] = []
+        job_ids: list[str] = []
+        for e in matched:
+            try:
+                ids = client.run_event(e["id"])
+                job_ids.extend(ids)
+                succeeded += 1
+            except CronicleAPIError as ex:
+                failed += 1
+                errors.append(f"{e.get('id')} '{e.get('title')}': {ex.code} — {ex.description}")
+            except Exception as ex:
+                failed += 1
+                errors.append(f"{e.get('id')} '{e.get('title')}': {type(ex).__name__}: {ex}")
+            time.sleep(max(stagger_seconds, hc.rate_limit_delay_ms / 1000.0))
+
+        return WriteResult(
+            host=hc.name,
+            executed=True,
+            matched_count=len(matched),
+            matched=summaries,
+            succeeded=succeeded,
+            failed=failed,
+            errors=errors,
+            notes=[
+                f"triggered {succeeded} events ({failed} failed)",
+                f"job ids: {', '.join(job_ids[:20])}"
+                + (f" ... (+{len(job_ids) - 20} more)" if len(job_ids) > 20 else ""),
+                "Watch them with cronicle_get_active_jobs; stop them with cronicle_abort_jobs.",
+            ],
+        )
+
+
+@mcp.tool()
 def cronicle_abort_job(job_id: str, host: Optional[str] = None) -> dict:
     """Abort ONE specific running job by job id.
 

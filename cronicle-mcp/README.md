@@ -6,9 +6,10 @@ operations as conversational tools in Claude Desktop or the Claude Code CLI.
 Replaces ~10 hand-edited bash scripts (in the parent folder) with a single
 MCP that you talk to in plain English: list events, clone between targets,
 toggle, move, change schedule/timeout, delete with safety, import Windows
-Task XMLs, abort running jobs, and manage categories/server groups.
+Task XMLs, run events on demand, abort running jobs, and manage
+categories/server groups.
 
-**18 tools across 4 groups: read-only, setup, mutations, runtime job control.**
+**20 tools across 4 groups: read-only, setup, mutations, runtime job control.**
 
 ---
 
@@ -34,6 +35,7 @@ Task XMLs, abort running jobs, and manage categories/server groups.
   - `event_list` (manager) — read tools
   - `event_create` / `event_modify` / `event_delete` — write tools
   - `cat_admin` / `grp_admin` — `cronicle_create_category` / `cronicle_create_server_group`
+  - `run_events` — `cronicle_run_event` / `cronicle_run_events`
   - `abort_events` — `cronicle_abort_job` / `cronicle_abort_jobs`
 - **Network access** to your Cronicle host(s) over HTTPS
 
@@ -131,7 +133,7 @@ Notes:
 - Backslashes in Windows paths must be escaped (`\\`).
 - **Fully quit Claude Desktop** (system tray → right-click → Quit) and reopen.
   Closing the window doesn't restart the MCP child processes.
-- Click the tool icon at the bottom of a chat — `cronicle` should show 18
+- Click the tool icon at the bottom of a chat — `cronicle` should show 20
   tools.
 
 To verify outside Claude Desktop:
@@ -164,7 +166,7 @@ Then `claude` from any directory and the tools are available.
 
 ---
 
-## Tools (18 total)
+## Tools (20 total)
 
 ### Read-only
 
@@ -197,10 +199,12 @@ Then `claude` from any directory and the tools are available.
 | `cronicle_clone_events` | `bulk_clone_events.sh` (and `seed_schedule2.py`) | Clone to a new target / category / host. Title and URL substring replacements. |
 | `cronicle_import_xml_tasks` | `bulk_import_xml.sh` + `parse_xml.py` | Import a directory of Windows Task Scheduler XML files. UTF-16 BOM aware. Maps Windows intervals (`PT5M`, `P1D`, ...) to Cronicle timing. |
 
-### Runtime job control (`abort_events` privilege required for the abort pair)
+### Runtime job control (`run_events` / `abort_events` privileges required)
 
 | Tool | Purpose |
 |---|---|
+| `cronicle_run_event` | "Run Now" for one event id (`emo*`). Returns the new job id(s). Fires even if the event is disabled. |
+| `cronicle_run_events` | "Run Now" in bulk by `EventFilter`. Skips disabled events by default, staggers triggers (`stagger_seconds=1.0`), `dry_run=True` default **and** `confirm_count` required to execute. |
 | `cronicle_abort_job` | Abort one running job by job id (`j*`). |
 | `cronicle_abort_jobs` | Bulk abort by `event_id` / `category_id` / `target_id` / `plugin`. At least one filter required (refuses to abort everything). `dry_run=True` default. |
 
@@ -295,6 +299,12 @@ Cross-host clones (`cronicle_clone_events` with `dest_host`) work end-to-end.
 > tell me which intervals appear in those XMLs
 > actually import them, all disabled
 
+# Running on demand
+> run event emoqxlu74u1 now
+> dry-run running every enabled event in the Storage category
+> run all enabled UMS-3 events, 2 seconds apart
+> stop everything I just started on UMS-3
+
 # Job control
 > what jobs are running on schedule with elapsed > 60 seconds?
 > abort job jmos5telp6s
@@ -312,6 +322,10 @@ Cross-host clones (`cronicle_clone_events` with `dest_host`) work end-to-end.
 - **`cronicle_delete_events`** additionally requires
   `confirm_count` to equal the live matched count when `dry_run=False`.
   Mismatch is rejected with an error explaining the drift.
+- **`cronicle_run_events`** also requires `confirm_count` to match, skips
+  disabled events unless asked, and staggers triggers (default 1s) so a
+  "run everything" doesn't burst hundreds of HTTP jobs at the app servers
+  at once.
 - **`cronicle_abort_jobs`** refuses to run with no filter at all (won't
   abort every running job by accident).
 - **API key** is never logged, never appears in `repr()`, never echoed in
