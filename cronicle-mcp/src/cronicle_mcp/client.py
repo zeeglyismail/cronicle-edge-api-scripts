@@ -115,6 +115,18 @@ class CronicleClient:
         """
         return self._post("get_active_jobs/v1", {}).get("jobs", {})
 
+    def run_event(self, event_id: str) -> list[str]:
+        """Fire one event immediately ("Run Now"). Requires run_events privilege.
+
+        Works on disabled events too — Cronicle treats a manual run as
+        independent of the enabled flag. Returns the new job id(s).
+
+        Common non-zero codes come back as CronicleAPIError:
+          max_children        event already running and concurrency is 1
+          no_matching_servers target group's regexp matches no live server
+        """
+        return self._post("run_event/v1", {"id": event_id}).get("ids", [])
+
     def abort_job(self, job_id: str) -> dict:
         """Abort one running job by id. Requires manager + abort_events privilege.
 
