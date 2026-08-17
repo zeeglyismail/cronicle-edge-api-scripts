@@ -9,7 +9,7 @@ toggle, move, change schedule/timeout, delete with safety, import Windows
 Task XMLs, run events on demand, abort running jobs, and manage
 categories/server groups.
 
-**20 tools across 4 groups: read-only, setup, mutations, runtime job control.**
+**21 tools across 4 groups: read-only, setup, mutations, runtime job control.**
 
 ---
 
@@ -133,7 +133,7 @@ Notes:
 - Backslashes in Windows paths must be escaped (`\\`).
 - **Fully quit Claude Desktop** (system tray → right-click → Quit) and reopen.
   Closing the window doesn't restart the MCP child processes.
-- Click the tool icon at the bottom of a chat — `cronicle` should show 20
+- Click the tool icon at the bottom of a chat — `cronicle` should show 21
   tools.
 
 To verify outside Claude Desktop:
@@ -166,7 +166,7 @@ Then `claude` from any directory and the tools are available.
 
 ---
 
-## Tools (20 total)
+## Tools (21 total)
 
 ### Read-only
 
@@ -189,8 +189,14 @@ Then `claude` from any directory and the tools are available.
 
 ### Mutations (`dry_run=True` by default; `mode="all"` blocked unless `i_understand_this_affects_everything=True`)
 
+Every one of these takes an `EventFilter`, and `mode="event_ids"` narrows it
+to specific events — so **single-event edits go through the same tools**:
+`{"mode": "event_ids", "event_ids": ["emoqxlu74u1"]}` disables exactly that
+one event.
+
 | Tool | Replaces | Purpose |
 |---|---|---|
+| `cronicle_update_event` | (new) | Set arbitrary fields on **one** event — title, plugin URL, notes, headers, `max_children`, anything the typed tools don't expose. `merge_params=True` protects `params` from Cronicle's wholesale replace. Returns a before/after diff. |
 | `cronicle_toggle_events` | `bulk_toggle_events.sh` + `bulk_toggle_by_target.sh` | Bulk enable/disable. |
 | `cronicle_move_events` | `bulk_move_category.sh` + `bulk_move_ums3.sh` | Bulk move to new category and/or target. |
 | `cronicle_update_schedule` | `bulk_update_schedule.sh` | Change timing. Presets: `1m`, `2m`, `3m`, `5m`, `10m`, `15m`, `20m`, `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h`, `daily`. |
@@ -216,11 +222,18 @@ Most tools take an `EventFilter`:
 
 ```python
 {
-  "mode": "target_only" | "category_only" | "category_and_target" | "all",
+  "mode": "event_ids" | "target_only" | "category_only" | "category_and_target" | "all",
+  "event_ids":   ["emoXXXXXXXX"], # required for event_ids
   "category_id": "cmoXXXXXXXX",   # required for category_only and category_and_target
   "target_id":   "gmoXXXXXXXX"    # required for target_only and category_and_target
 }
 ```
+
+`mode="event_ids"` is the single-event (or hand-picked-set) case. A
+one-element list makes any bulk tool act on exactly one event, which is why
+there's no separate `toggle_one_event` / `move_one_event` tool. A typo'd id
+simply doesn't match — the dry-run's `matched` list is where you'd notice,
+so read the count before confirming.
 
 `mode="all"` matches every event — useful for orientation, dangerous for
 mutations. Tools refuse it unless you also pass
@@ -281,6 +294,12 @@ Cross-host clones (`cronicle_clone_events` with `dest_host`) work end-to-end.
 > list all events in the UMS category on UMS-3
 > get full details for emoqxlu74u1
 > show me events with timing "every minute"
+
+# Single-event edits
+> disable just emoqxlu74u1
+> rename emoqxlu74u1 to "ums-3-Payment Migration (paused)"
+> point emoqxlu74u1 at https://ums-schedule-3.osl.team/api/x instead
+> set max_children to 2 on emoqxlu74u1
 
 # Bulk mutations (all default to dry-run)
 > dry-run disabling all events on schedule2's UMS-6 target
