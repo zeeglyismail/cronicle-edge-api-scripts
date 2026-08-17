@@ -166,6 +166,8 @@ def cronicle_list_events(
     Use cronicle_get_event for the full event payload of a specific id.
 
     filter.mode is one of:
+      - "event_ids"            requires event_ids=[...] — explicit `emo*` ids.
+                               A one-element list is the single-event case.
       - "target_only"          requires target_id
       - "category_only"        requires category_id
       - "category_and_target"  requires both (most precise — preferred)
@@ -311,6 +313,113 @@ def cronicle_summarize_schedule(host: Optional[str] = None) -> ScheduleSummary:
         by_category_and_target=pairs,
         unknown_targets=unknown,
     )
+
+
+@mcp.tool()
+def cronicle_update_event(
+    event_id: str,
+    fields: dict[str, Any],
+    merge_params: bool = True,
+    dry_run: bool = True,
+    host: Optional[str] = None,
+) -> dict:
+    """Set arbitrary fields on ONE event -- the general-purpose escape hatch.
+
+    The bulk tools cover the common edits and are safer (preview + counts);
+    reach for this when you need a field none of them expose, or a one-off
+    edit to a single event: rename it, rewrite its plugin URL, change its
+    notes, swap its plugin, set a header.
+
+    For a single-event edit that a bulk tool already handles (enable/disable,
+    move, timing, timeouts), prefer that tool with
+    filter={"mode": "event_ids", "event_ids": ["emoXXX"]} -- same effect,
+    with validation on the value you're setting.
+
+    fields is merged into the event; anything you don't send is left alone.
+    Commonly useful keys:
+      title            str    event name (must be unique on the host)
+      enabled          0 | 1
+      category         str    cmo* category id
+      target           str    gmo* server group id
+      notes            str
+      plugin           str    e.g. "urlplug"
+      params           dict   plugin params (url, method, headers, timeout...)
+      timeout          int    job timeout, seconds
+      catch_up         0 | 1
+      max_children     int    concurrency
+
+    PARAMS GOTCHA: Cronicle replaces `params` wholesale rather than merging,
+    so sending {"params": {"url": "..."}} would wipe method/headers/timeout.
+    merge_params=True (default) reads the current params and merges your keys
+    over them. Set False only if you really mean to replace the whole object.
+
+    dry_run=True (default) returns a before/after diff of exactly the keys
+    that would change, without writing. Re-call with dry_run=False to apply.
+    """
+    if not event_id or not event_id.strip():
+        raise ValueError("cronicle_update_event: event_id is required")
+    if not fields:
+        raise ValueError("cronicle_update_event: fields is empty -- nothing to update")
+    if "id" in fields:
+        raise ValueError(
+            "cronicle_update_event: 'id' cannot be changed. Pass the event id as "
+            "the event_id argument; it identifies which event to edit."
+        )
+
+    event_id = event_id.strip()
+    hc = _resolve_host(host)
+
+    with CronicleClient(hc) as client:
+        current = client.get_event(event_id)
+        if not current:
+            raise ValueError(
+                f"cronicle_update_event: no event with id '{event_id}' on host "
+                f"'{hc.name}'. Check the id with cronicle_list_events."
+            )
+
+        payload = dict(fields)
+        notes: list[str] = []
+        if "params" in payload and merge_params:
+            existing_params = dict(current.get("params") or {})
+            existing_params.update(payload["params"] or {})
+            payload["params"] = existing_params
+            notes.append(
+                "params merged over the event's current params "
+                "(merge_params=False would replace them wholesale)."
+            )
+
+        changes = {
+            key: {"before": current.get(key), "after": value}
+            for key, value in payload.items()
+            if current.get(key) != value
+        }
+        unchanged = [k for k in payload if k not in changes]
+        if unchanged:
+            notes.append(f"already at the requested value, no-op: {', '.join(unchanged)}")
+
+        result = {
+            "host": hc.name,
+            "event_id": event_id,
+            "event_title": current.get("title", ""),
+            "changes": changes,
+        }
+
+        if dry_run:
+            result["executed"] = False
+            result["notes"] = notes + [
+                f"Would change {len(changes)} field(s). Re-call with dry_run=False to apply."
+            ]
+            return result
+
+        if not changes:
+            result["executed"] = False
+            result["notes"] = notes + ["Nothing to do -- every field already has that value."]
+            return result
+
+        client.update_event(event_id, payload)
+        result["executed"] = True
+        result["notes"] = notes + [f"updated {len(changes)} field(s)"]
+        return result
 
 
 @mcp.tool()
